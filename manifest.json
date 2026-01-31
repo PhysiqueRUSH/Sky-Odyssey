@@ -8,8 +8,8 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/2534/2534125.png",
-      "sizes": "512x512",
+      "src": "skyico.png",
+      "sizes": "576x576",
       "type": "image/png",
       "purpose": "any maskable"
     }
