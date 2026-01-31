@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Sky Odyssey</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#000510">
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
+    <style>
+        body { margin: 0; background: #000; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; z-index: 100;
+            padding: 15px; background: rgba(0, 5, 15, 0.85);
+            color: #00ffcc; pointer-events: none; border-bottom: 1px solid #00ffcc;
+        }
+        .interactive { pointer-events: auto; }
+        #distance-hud {
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+            background: rgba(0, 20, 40, 0.9); border: 2px solid #00ffcc;
+            padding: 15px; border-radius: 8px; color: #fff; text-align: center;
+            min-width: 250px; display: none; z-index: 101;
+        }
+        .dist-val { font-size: 1.5em; color: #00ffcc; font-weight: bold; display: block; }
+        select, button {
+            background: #001a2b; color: #00ffcc; border: 1px solid #00ffcc;
+            padding: 8px; border-radius: 5px; font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <strong>SKY ODYSSEY</strong> | <span id="pos-info" style="font-size: 10px;">GPS...</span>
+        <br><br>
+        <div style="display: flex; gap: 10px;">
+            <select id="target-select" class="interactive" onchange="updateTarget(this.value)">
+                <option value="">-- Cible --</option>
+                <optgroup label="Système Solaire" id="planets-list"></optgroup>
+                <optgroup label="Étoiles" id="stars-list"></optgroup>
+            </select>
+            <button class="interactive" onclick="requestPermissions()">Calibrer</button>
+        </div>
+    </div>
+
+    <div id="distance-hud">
+        <span id="hud-name" style="letter-spacing: 1.5px; font-size: 0.9em;">OBJET</span>
+        <div class="dist-val" id="hud-dist">--</div>
+        <span id="hud-unit" style="font-size: 0.8em; color: #88ccff;">unité</span>
+    </div>
+
+    <a-scene vr-mode-ui="enabled: false" embedded>
+        <a-entity id="camera-rig">
+            <a-entity id="camera" camera look-controls="magicWindowTrackingEnabled: true"></a-entity>
+        </a-entity>
+        <a-sky color="#00020a"></a-sky>
+        <a-entity id="celestial-layer"></a-entity>
+    </a-scene>
+
+    <script>
+        const starData = [
+            { name: "Sirius", ra: 6.75, dec: -16.71, dist: 8.6 },
+            { name: "Vega", ra: 18.61, dec: 38.78, dist: 25.0 },
+            { name: "Betelgeuse", ra: 5.92, dec: 7.41, dist: 642.5 },
+            { name: "Polaris", ra: 2.53, dec: 89.26, dist: 431.4 },
+            { name: "Alpha Centauri", ra: 14.66, dec: -60.83, dist: 4.37 }
+        ];
+
+        let userCoords = null;
+        let selectedObject = null;
+        const planets = ["Sun", "Moon", "Mars", "Jupiter", "Saturn", "Venus"];
+
+        // Enregistrement du Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+
+        navigator.geolocation.getCurrentPosition(pos => {
+            userCoords = pos.coords;
+            document.getElementById('pos-info').innerText = `${userCoords.latitude.toFixed(2)}°, ${userCoords.longitude.toFixed(2)}°`;
+            init();
+        });
+
+        function init() {
+            const pList = document.getElementById('planets-list');
+            const sList = document.getElementById('stars-list');
+            planets.forEach(p => pList.innerHTML += `<option value="${p}">${p}</option>`);
+            starData.forEach(s => sList.innerHTML += `<option value="${s.name}">${s.name}</option>`);
+            
+            setInterval(refreshPositions, 2000);
+            renderLoop();
+        }
+
+        function refreshPositions() {
+            if (!userCoords) return;
+            const container = document.getElementById('celestial-layer');
+            container.innerHTML = '';
+            const obs = new Astronomy.Observer(userCoords.latitude, userCoords.longitude, 0);
+            const now = new Date();
+
+            planets.forEach(name => {
+                const eq = Astronomy.Equator(name, now, obs, true, true);
+                const horiz = Astronomy.Horizon(now, obs, eq.ra, eq.dec, 'refray');
+                renderMarker(name, horiz, true);
+                if (selectedObject === name) {
+                    const dKm = eq.dist * 149597870.7;
+                    updateHUD(name, dKm, "km");
+                }
+            });
+
+            starData.forEach(star => {
+                const horiz = Astronomy.Horizon(now, obs, star.ra, star.dec, 'refray');
+                renderMarker(star.name, horiz, false);
+                if (selectedObject === star.name) updateHUD(star.name, star.dist, "AL");
+            });
+        }
+
+        function renderMarker(name, horiz, isPlanet) {
+            const pos = azAltToCartesian(horiz.azimuth, horiz.altitude, 50);
+            const el = document.createElement('a-sphere');
+            el.setAttribute('position', pos);
+            el.setAttribute('radius', isPlanet ? "0.6" : "0.2");
+            el.setAttribute('color', isPlanet ? "#00ffcc" : "#ffffff");
+            el.setAttribute('material', `opacity: ${horiz.altitude > 0 ? 1 : 0.2}`);
+            document.getElementById('celestial-layer').appendChild(el);
+        }
+
+        function updateHUD(name, val, unit) {
+            const hud = document.getElementById('distance-hud');
+            hud.style.display = 'block';
+            document.getElementById('hud-name').innerText = name;
+            document.getElementById('hud-dist').innerText = unit === "km" ? Math.round(val).toLocaleString() : val;
+            document.getElementById('hud-unit').innerText = unit === "km" ? "Kilomètres" : "Années-Lumière";
+        }
+
+        function updateTarget(val) { selectedObject = val; refreshPositions(); }
+
+        function azAltToCartesian(az, alt, radius) {
+            const phi = (90 - alt) * (Math.PI / 180);
+            const theta = (az + 180) * (Math.PI / 180);
+            return `${radius * Math.sin(phi) * Math.cos(theta)} ${radius * Math.cos(phi)} ${radius * Math.sin(phi) * Math.sin(theta)}`;
+        }
+
+        async function requestPermissions() {
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                const res = await DeviceOrientationEvent.requestPermission();
+                if (res === 'granted') window.location.reload();
+            }
+        }
+
+        function renderLoop() { requestAnimationFrame(renderLoop); }
+    </script>
+</body>
+</html>
