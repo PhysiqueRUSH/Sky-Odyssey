@@ -8,7 +8,6 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" href="skyico.png" />
   <link rel="apple-touch-icon" href="skyico.png" />
-
   <meta name="theme-color" content="#000510" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -18,31 +17,37 @@
   <script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
 
   <style>
-    body {
+    html, body {
+      width: 100%;
+      height: 100%;
       margin: 0;
       background: #000;
-      font-family: "Segoe UI", sans-serif;
       overflow: hidden;
-      touch-action: manipulation; /* améliore les taps sur mobile */
+      touch-action: manipulation;
+      font-family: "Segoe UI", sans-serif;
     }
 
-    /* Assure que la scène reste sous l'UI */
-    a-scene, canvas {
+    /* SCÈNE EN PLEIN ÉCRAN (IMPORTANT) */
+    a-scene {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
       z-index: 1;
     }
+    canvas { z-index: 1; }
 
-    /* UI au-dessus du canvas WebGL */
+    /* UI AU-DESSUS */
     #ui-layer {
-      position: fixed; /* IMPORTANT (mobile) */
-      top: 0;
-      left: 0;
+      position: fixed;
+      top: 0; left: 0;
       width: 100%;
       z-index: 9999;
       padding: 20px;
+      box-sizing: border-box;
       background: linear-gradient(to bottom, rgba(0, 5, 15, 0.95), transparent);
       color: #00ffcc;
-      pointer-events: auto; /* IMPORTANT : le clic passe */
-      box-sizing: border-box;
+      pointer-events: auto;
     }
 
     #distance-hud {
@@ -60,7 +65,7 @@
       display: none;
       z-index: 10000;
       box-shadow: 0 0 20px rgba(0, 255, 204, 0.3);
-      pointer-events: none; /* HUD non interactif */
+      pointer-events: none;
       box-sizing: border-box;
     }
 
@@ -76,7 +81,7 @@
       font-family: monospace;
       font-size: 11px;
       color: #88ccff;
-      opacity: 0.8;
+      opacity: 0.9;
     }
 
     select, button {
@@ -90,9 +95,7 @@
       transition: all 0.2s ease;
     }
 
-    button:active {
-      transform: scale(0.98);
-    }
+    button:active { transform: scale(0.98); }
 
     button.success {
       background: #00ffcc;
@@ -108,13 +111,12 @@
     <strong style="letter-spacing: 2px;">SKY ODYSSEY</strong><br />
     <span id="pos-info">Synchronisation GPS...</span>
     <br /><br />
-    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+    <div style="display:flex; gap:12px; flex-wrap:wrap;">
       <select id="target-select">
         <option value="">-- Sélectionner Cible --</option>
         <optgroup label="Système Solaire" id="planets-list"></optgroup>
         <optgroup label="Étoiles Majeures" id="stars-list"></optgroup>
       </select>
-
       <button id="btn-calibrate">Calibrer Gyro</button>
     </div>
   </div>
@@ -125,19 +127,32 @@
     <span id="hud-unit" style="font-size: 0.8em; color: #88ccff;">unité</span>
   </div>
 
-  <a-scene vr-mode-ui="enabled: false" embedded>
+  <a-scene vr-mode-ui="enabled:false" embedded renderer="antialias:true">
     <a-entity id="camera-rig">
       <a-entity
         id="camera"
-        camera
-        look-controls="magicWindowTrackingEnabled: true"
-        wasd-controls="enabled: false"
-      ></a-entity>
+        camera="near:0.1; far:5000"
+        look-controls="enabled:true; magicWindowTrackingEnabled:true; touchEnabled:true"
+        wasd-controls="enabled:false">
+      </a-entity>
     </a-entity>
 
-    <a-sky color="#00020a"></a-sky>
+    <!-- CIEL + REPÈRES VISUELS POUR VOIR LE GYRO -->
+    <a-sky color="#001022"></a-sky>
+
+    <!-- Anneau “horizon” -->
+    <a-ring position="0 0 -12" rotation="90 0 0" radius-inner="4.9" radius-outer="5.1"
+            material="color:#00ffcc; opacity:0.35; transparent:true; emissive:#00ffcc; emissiveIntensity:0.4"></a-ring>
+
+    <!-- Axes (repère) -->
+    <a-entity position="0 0 -12">
+      <a-box position="3 0 0" width="6" height="0.04" depth="0.04" material="color:#ff4444; emissive:#ff4444; emissiveIntensity:0.6"></a-box>
+      <a-box position="0 3 0" width="0.04" height="6" depth="0.04" material="color:#44ff44; emissive:#44ff44; emissiveIntensity:0.6"></a-box>
+      <a-box position="0 0 3" width="0.04" height="0.04" depth="6" material="color:#4488ff; emissive:#4488ff; emissiveIntensity:0.6"></a-box>
+    </a-entity>
+
     <a-entity id="celestial-layer"></a-entity>
-    <a-light type="ambient" intensity="0.5"></a-light>
+    <a-light type="ambient" intensity="0.9"></a-light>
   </a-scene>
 
   <script>
@@ -147,7 +162,7 @@
       { name: "Betelgeuse", ra: 5.92, dec: 7.41, dist: 642.5 },
       { name: "Polaris", ra: 2.53, dec: 89.26, dist: 431.4 },
       { name: "Alpha Centauri", ra: 14.66, dec: -60.83, dist: 4.37 },
-      { name: "Rigel", ra: 5.24, dec: -8.2, dist: 863.0 }
+      { name: "Rigel", ra: 5.24, dec: -8.20, dist: 863.0 }
     ];
 
     let userCoords = null;
@@ -161,22 +176,15 @@
       });
     }
 
-    // --- Wire UI events (IMPORTANT) ---
+    // --- UI events ---
     window.addEventListener("DOMContentLoaded", () => {
-      const btn = document.getElementById("btn-calibrate");
-      const select = document.getElementById("target-select");
-
-      // Debug tap/click
-      btn.addEventListener("click", () => {
-        console.log("CLICK calibrer reçu");
-        requestPermissions();
+      document.getElementById("btn-calibrate").addEventListener("click", () => {
+        requestPermissionsAndCalibrate();
       });
 
-      btn.addEventListener("touchstart", () => {
-        console.log("TOUCH calibrer reçu");
-      }, { passive: true });
-
-      select.addEventListener("change", (e) => updateTarget(e.target.value));
+      document.getElementById("target-select").addEventListener("change", (e) => {
+        updateTarget(e.target.value);
+      });
     });
 
     // --- GPS ---
@@ -191,22 +199,16 @@
         console.log("Erreur GPS", err);
         document.getElementById("pos-info").innerText = "Erreur GPS : Accès refusé.";
       },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 5000,
-        timeout: 10000
-      }
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
     );
 
     function initApp() {
       const pList = document.getElementById("planets-list");
       const sList = document.getElementById("stars-list");
-
       pList.innerHTML = "";
       sList.innerHTML = "";
-
-      planets.forEach(p => (pList.innerHTML += `<option value="${p}">${p}</option>`));
-      starData.forEach(s => (sList.innerHTML += `<option value="${s.name}">${s.name}</option>`));
+      planets.forEach(p => pList.innerHTML += `<option value="${p}">${p}</option>`);
+      starData.forEach(s => sList.innerHTML += `<option value="${s.name}">${s.name}</option>`);
 
       refreshPositions();
       setInterval(refreshPositions, 1000);
@@ -252,10 +254,12 @@
 
       const dot = document.createElement("a-sphere");
       dot.setAttribute("radius", isPlanet ? "0.7" : "0.25");
-      dot.setAttribute("color", isPlanet ? "#00ffcc" : "#ffffff");
-      dot.setAttribute(
-        "material",
-        `emissive: ${isPlanet ? "#00ffcc" : "#ffffff"}; emissiveIntensity: 0.4; opacity: ${horiz.altitude > 0 ? 1 : 0.3}`
+      dot.setAttribute("material",
+        `color:${isPlanet ? "#00ffcc" : "#ffffff"};
+         emissive:${isPlanet ? "#00ffcc" : "#ffffff"};
+         emissiveIntensity:0.6;
+         opacity:${horiz.altitude > 0 ? 1 : 0.3};
+         transparent:true;`
       );
 
       el.appendChild(dot);
@@ -265,15 +269,13 @@
     function updateHUD(name, val, unit) {
       const hud = document.getElementById("distance-hud");
       hud.style.display = "block";
-
       document.getElementById("hud-name").innerText = name;
 
       if (unit === "km") {
         document.getElementById("hud-dist").innerText = Math.round(val).toLocaleString("fr-FR");
         document.getElementById("hud-unit").innerText = "Kilomètres de la Terre";
       } else {
-        document.getElementById("hud-dist").innerText =
-          (typeof val === "number") ? val.toFixed(1).toLocaleString("fr-FR") : val;
+        document.getElementById("hud-dist").innerText = Number(val).toFixed(1).toLocaleString("fr-FR");
         document.getElementById("hud-unit").innerText = "Années-Lumière de la Terre";
       }
     }
@@ -290,41 +292,54 @@
       return `${radius * Math.sin(phi) * Math.cos(theta)} ${radius * Math.cos(phi)} ${radius * Math.sin(phi) * Math.sin(theta)}`;
     }
 
-    // --- Android: pas besoin de permission comme iOS, mais on garde la fonction ---
-    async function requestPermissions() {
+    // --- CALIBRATION ANDROID (pas de prompt, mais on force une relance) ---
+    function requestPermissionsAndCalibrate() {
       const btn = document.getElementById("btn-calibrate");
+      const cam = document.getElementById("camera");
 
-      try {
-        // Sur Android, on peut juste tester si les events arrivent
-        let gotEvent = false;
+      // 1) Reset rotation
+      cam.setAttribute("rotation", "0 0 0");
 
-        const handler = (e) => {
-          gotEvent = true;
-          console.log("deviceorientation reçu:", e.alpha, e.beta, e.gamma);
-          window.removeEventListener("deviceorientation", handler);
-          setCalibrateSuccess(btn);
-        };
+      // 2) Relancer look-controls si possible
+      const lc = cam.components && cam.components["look-controls"];
+      if (lc) {
+        try {
+          // Certains devices gardent un état interne : on le remet à zéro
+          if (lc.yawObject) lc.yawObject.rotation.y = 0;
+          if (lc.pitchObject) lc.pitchObject.rotation.x = 0;
 
-        window.addEventListener("deviceorientation", handler, { once: true });
-
-        // Si rien ne vient en 1.5s, on valide quand même (certains devices ne donnent pas alpha/beta/gamma)
-        setTimeout(() => {
-          if (!gotEvent) {
-            console.log("deviceorientation non reçu (device ou navigateur restreint) : on valide quand même.");
-            setCalibrateSuccess(btn);
-          }
-        }, 1500);
-
-      } catch (e) {
-        console.log("Erreur capteurs", e);
-        alert("Erreur capteurs. Vérifie HTTPS et autorisations navigateur.");
+          // Redémarre l'écoute
+          if (typeof lc.pause === "function") lc.pause();
+          if (typeof lc.play === "function") lc.play();
+        } catch (e) {
+          console.log("Reset look-controls error:", e);
+        }
       }
+
+      // 3) Test : est-ce qu'on reçoit des events capteurs ?
+      let gotEvent = false;
+      const handler = (e) => {
+        gotEvent = true;
+        window.removeEventListener("deviceorientation", handler);
+        setCalibrateSuccess(btn, true);
+      };
+      window.addEventListener("deviceorientation", handler, { once: true });
+
+      setTimeout(() => {
+        if (!gotEvent) {
+          // Le gyro peut être désactivé au niveau du téléphone / navigateur
+          setCalibrateSuccess(btn, false);
+        }
+      }, 1200);
     }
 
-    function setCalibrateSuccess(btn) {
+    function setCalibrateSuccess(btn, sensorOk) {
       btn.classList.add("success");
-      btn.innerText = "CAPTEURS OK";
-      setTimeout(() => console.log("Capteurs synchronisés."), 300);
+      btn.innerText = sensorOk ? "CAPTEURS OK" : "GYRO OFF ?";
+      if (!sensorOk) {
+        // message utile sans bloquer
+        console.log("Aucun event deviceorientation reçu. Vérifie : capteurs autorisés, économie d'énergie, navigateur, etc.");
+      }
     }
   </script>
 </body>
