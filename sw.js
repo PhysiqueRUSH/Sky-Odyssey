@@ -3,7 +3,7 @@
  * Stratégie : Cache-First (Priorité au cache pour la performance et l'offline)
  */
 
-const CACHE_NAME = 'sky-odyssey-cache-v7';
+const CACHE_NAME = 'sky-odyssey-cache-v8';
 
 // Liste des ressources critiques à mettre en cache
 const ASSETS_TO_CACHE = [
