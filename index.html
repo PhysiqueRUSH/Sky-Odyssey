@@ -7,13 +7,16 @@
 
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" href="skyico.png" />
+  <link rel="apple-touch-icon" href="skyico.png" />
   <meta name="theme-color" content="#000510" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
   <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.19/astronomy.browser.min.js"></script>
 
   <style>
-    /* IMPORTANT : donner une hauteur réelle au document */
     html, body {
       width: 100%;
       height: 100%;
@@ -21,16 +24,17 @@
       background: #000;
       overflow: hidden;
       font-family: "Segoe UI", sans-serif;
+      touch-action: manipulation;
     }
 
-    /* IMPORTANT : forcer A-Frame en plein écran (sinon embedded peut faire 0px) */
+    /* Scène plein écran (évite le 0px de haut) */
     a-scene {
       position: fixed !important;
       inset: 0 !important;
       width: 100vw !important;
       height: 100vh !important;
       z-index: 1 !important;
-      background: #020816; /* au cas où */
+      background: #020816;
     }
     canvas { width: 100% !important; height: 100% !important; }
 
@@ -40,18 +44,39 @@
       top: 0; left: 0;
       width: 100%;
       z-index: 9999;
-      padding: 20px;
+      padding: 18px 18px 12px 18px;
       box-sizing: border-box;
-      background: linear-gradient(to bottom, rgba(0, 5, 15, 0.95), transparent);
+      background: linear-gradient(to bottom, rgba(0, 5, 15, 0.92), transparent);
       color: #00ffcc;
       pointer-events: auto;
+    }
+
+    #title {
+      letter-spacing: 2px;
+      font-weight: 700;
+      font-size: 20px;
     }
 
     #pos-info {
       font-family: monospace;
       font-size: 12px;
       color: #88ccff;
-      opacity: 0.9;
+      opacity: 0.95;
+      margin-top: 6px;
+    }
+
+    #guide {
+      margin-top: 10px;
+      font-family: monospace;
+      font-size: 13px;
+      color: #ffffff;
+      opacity: 0.95;
+      padding: 8px 10px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(0,255,204,0.25);
+      border-radius: 10px;
+      display: inline-block;
+      max-width: 95vw;
     }
 
     select, button {
@@ -59,93 +84,158 @@
       color: #00ffcc;
       border: 1px solid #00ffcc;
       padding: 10px 12px;
-      border-radius: 6px;
+      border-radius: 8px;
       font-size: 14px;
       outline: none;
     }
+    button:active { transform: scale(0.98); }
 
     button.success {
       background: #00ffcc;
       color: #001a2b;
       border-color: #fff;
-      font-weight: bold;
+      font-weight: 700;
     }
 
-    /* Mini debug en bas */
-    #debug {
+    #controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    /* Réticule au centre */
+    #reticle {
       position: fixed;
-      bottom: 10px;
-      left: 10px;
-      z-index: 9999;
-      color: #fff;
-      font-family: monospace;
-      font-size: 12px;
-      background: rgba(0,0,0,0.45);
-      padding: 8px 10px;
-      border-radius: 8px;
-      max-width: 95vw;
+      left: 50%;
+      top: 50%;
+      width: 18px;
+      height: 18px;
+      transform: translate(-50%, -50%);
+      z-index: 9998;
       pointer-events: none;
-      white-space: pre-line;
+      opacity: 0.9;
+    }
+    #reticle:before, #reticle:after {
+      content: "";
+      position: absolute;
+      background: rgba(0,255,204,0.9);
+      box-shadow: 0 0 10px rgba(0,255,204,0.35);
+    }
+    #reticle:before {
+      left: 50%;
+      top: 0;
+      width: 2px;
+      height: 18px;
+      transform: translateX(-50%);
+    }
+    #reticle:after {
+      top: 50%;
+      left: 0;
+      width: 18px;
+      height: 2px;
+      transform: translateY(-50%);
+    }
+
+    /* HUD distance */
+    #distance-hud {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9999;
+      background: rgba(0, 20, 40, 0.85);
+      border: 1px solid rgba(0,255,204,0.55);
+      padding: 12px 14px;
+      border-radius: 14px;
+      color: #fff;
+      min-width: 280px;
+      box-sizing: border-box;
+      display: none;
+      pointer-events: none;
+      box-shadow: 0 0 18px rgba(0,255,204,0.18);
+      text-align: center;
+    }
+    #hud-name {
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      font-size: 12px;
+      opacity: 0.9;
+      display: block;
+    }
+    #hud-dist {
+      font-size: 22px;
+      color: #00ffcc;
+      font-weight: 800;
+      margin: 6px 0 2px 0;
+    }
+    #hud-unit {
+      font-size: 12px;
+      color: #88ccff;
+      opacity: 0.95;
     }
   </style>
 </head>
 
 <body>
   <div id="ui-layer">
-    <strong style="letter-spacing:2px;">SKY ODYSSEY</strong><br>
-    <span id="pos-info">GPS…</span>
-    <br><br>
-    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+    <div id="title">SKY ODYSSEY</div>
+    <div id="pos-info">GPS…</div>
+    <div id="guide">Autorise le GPS, puis sélectionne un objet.</div>
+
+    <div id="controls">
       <select id="target-select">
         <option value="">-- Sélectionner Cible --</option>
         <optgroup label="Système Solaire" id="planets-list"></optgroup>
         <optgroup label="Étoiles Majeures" id="stars-list"></optgroup>
       </select>
 
-      <button id="btn-calibrate">Calibrer Gyro</button>
+      <button id="btn-recenter">Recentrer</button>
     </div>
   </div>
 
-  <div id="debug">Debug…</div>
+  <div id="reticle"></div>
 
-  <!-- NOTE : embedded OK, mais on force le plein écran via CSS -->
+  <div id="distance-hud">
+    <span id="hud-name">Objet</span>
+    <div id="hud-dist">--</div>
+    <span id="hud-unit">--</span>
+  </div>
+
   <a-scene embedded vr-mode-ui="enabled:false" renderer="antialias:true; precision:mediump">
-    <!-- Caméra -->
     <a-entity id="cameraRig">
       <a-entity
         id="camera"
-        camera="near:0.1; far:2000"
+        camera="near:0.1; far:4000"
         position="0 1.6 0"
-        look-controls="enabled:true; magicWindowTrackingEnabled:true"
+        look-controls="enabled:true; magicWindowTrackingEnabled:true; touchEnabled:true"
         wasd-controls="enabled:false">
       </a-entity>
     </a-entity>
 
-    <!-- Fond visible -->
     <a-sky color="#07152e"></a-sky>
 
-    <!-- REPÈRES GÉANTS (si tu ne vois pas ça, la scène ne s'affiche pas du tout) -->
-    <a-plane rotation="-90 0 0" width="60" height="60"
-             material="color:#0b2545; opacity:0.9; transparent:true"></a-plane>
+    <!-- Repères discrets (pour ne jamais être “perdu”) -->
+    <a-ring position="0 0 -12" rotation="90 0 0" radius-inner="4.9" radius-outer="5.1"
+            material="color:#00ffcc; opacity:0.20; transparent:true; emissive:#00ffcc; emissiveIntensity:0.3"></a-ring>
 
-    <a-box position="0 2 -6" depth="1" height="1" width="1"
-           material="color:#00ffcc; emissive:#00ffcc; emissiveIntensity:0.7"></a-box>
+    <a-entity position="0 0 -12">
+      <a-box position="3 0 0" width="6" height="0.04" depth="0.04"
+             material="color:#ff4444; emissive:#ff4444; emissiveIntensity:0.4"></a-box>
+      <a-box position="0 3 0" width="0.04" height="6" depth="0.04"
+             material="color:#44ff44; emissive:#44ff44; emissiveIntensity:0.4"></a-box>
+      <a-box position="0 0 3" width="0.04" height="0.04" depth="6"
+             material="color:#4488ff; emissive:#4488ff; emissiveIntensity:0.4"></a-box>
+    </a-entity>
 
-    <a-text value="SI TU VOIS CE TEXTE, A-FRAME FONCTIONNE"
-            position="-4 3 -6" width="14"
-            color="#ffffff"></a-text>
-
-    <!-- Couche des astres -->
     <a-entity id="celestial-layer"></a-entity>
-
     <a-light type="ambient" intensity="1.0"></a-light>
   </a-scene>
 
   <script>
-    const debugEl = document.getElementById("debug");
-    function debug(msg) { debugEl.textContent = msg; }
-
+    // ----------------------------
     // Données
+    // ----------------------------
     const starData = [
       { name: "Sirius", ra: 6.75, dec: -16.71, dist: 8.6 },
       { name: "Vega", ra: 18.61, dec: 38.78, dist: 25.0 },
@@ -154,60 +244,75 @@
       { name: "Alpha Centauri", ra: 14.66, dec: -60.83, dist: 4.37 },
       { name: "Rigel", ra: 5.24, dec: -8.20, dist: 863.0 }
     ];
+
     const planets = ["Sun", "Moon", "Mars", "Jupiter", "Saturn", "Venus"];
 
     let userCoords = null;
     let selectedObject = null;
+    let lastTargetHoriz = null; // {azimuth, altitude, ...}
+    let tickGuidance = null;
 
-    // UI events
-    document.getElementById("btn-calibrate").addEventListener("click", () => {
-      const btn = document.getElementById("btn-calibrate");
-      btn.classList.add("success");
-      btn.textContent = "CAPTEURS OK";
+    const guideEl = document.getElementById("guide");
+    const posEl = document.getElementById("pos-info");
 
-      // Test capteurs (sur Android parfois désactivé)
-      let got = false;
-      const handler = () => { got = true; window.removeEventListener("deviceorientation", handler); };
-      window.addEventListener("deviceorientation", handler, { once: true });
-      setTimeout(() => {
-        debug(
-          "Scene: OK (repères affichés)\n" +
-          "GPS: " + (userCoords ? "OK" : "en attente") + "\n" +
-          "Gyro events: " + (got ? "OK" : "NON (peut être désactivé)") + "\n" +
-          "Sélection: " + (selectedObject || "aucune")
-        );
-      }, 800);
-    });
+    // ----------------------------
+    // Service worker (optionnel)
+    // ----------------------------
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch(err => console.log("SW non enregistré", err));
+      });
+    }
 
+    // ----------------------------
+    // UI wiring
+    // ----------------------------
     document.getElementById("target-select").addEventListener("change", (e) => {
       selectedObject = e.target.value || null;
+      if (!selectedObject) {
+        document.getElementById("distance-hud").style.display = "none";
+        guideEl.textContent = "Sélectionne un objet.";
+        lastTargetHoriz = null;
+      } else {
+        guideEl.textContent = "Analyse du ciel… bouge ton téléphone.";
+      }
       refreshPositions();
     });
 
-    // Remplir listes
+    document.getElementById("btn-recenter").addEventListener("click", () => {
+      recenterView();
+    });
+
+    // ----------------------------
+    // Init listes
+    // ----------------------------
     const pList = document.getElementById("planets-list");
     const sList = document.getElementById("stars-list");
     planets.forEach(p => pList.innerHTML += `<option value="${p}">${p}</option>`);
     starData.forEach(s => sList.innerHTML += `<option value="${s.name}">${s.name}</option>`);
 
+    // ----------------------------
     // GPS
+    // ----------------------------
     navigator.geolocation.getCurrentPosition(
-      pos => {
+      (pos) => {
         userCoords = pos.coords;
-        document.getElementById("pos-info").textContent =
-          `LAT: ${userCoords.latitude.toFixed(4)} | LON: ${userCoords.longitude.toFixed(4)}`;
-        debug("Scene: OK (repères)\nGPS: OK\nChoisis un objet dans la liste.");
+        posEl.textContent = `LAT: ${userCoords.latitude.toFixed(4)} | LON: ${userCoords.longitude.toFixed(4)}`;
+        guideEl.textContent = "Sélectionne un objet (Sun, Moon, etc.), puis suis le guidage.";
         refreshPositions();
         setInterval(refreshPositions, 1500);
       },
-      err => {
-        document.getElementById("pos-info").textContent = "GPS refusé / erreur";
-        debug("Scene: OK (repères)\nGPS: NON\nAutorise la localisation.");
-        console.log(err);
+      (err) => {
+        console.log("Erreur GPS", err);
+        posEl.textContent = "GPS refusé / erreur";
+        guideEl.textContent = "Autorise la localisation pour afficher le ciel.";
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
     );
 
+    // ----------------------------
+    // Rendu positions célestes
+    // ----------------------------
     function refreshPositions() {
       if (!userCoords) return;
 
@@ -217,68 +322,206 @@
       const obs = new Astronomy.Observer(userCoords.latitude, userCoords.longitude, 0);
       const now = new Date();
 
+      lastTargetHoriz = null;
+
       // Planètes
-      planets.forEach(name => {
+      for (const name of planets) {
         try {
           const eq = Astronomy.Equator(name, now, obs, true, true);
           const horiz = Astronomy.Horizon(now, obs, eq.ra, eq.dec, "refray");
 
-          // IMPORTANT: on rend visible même proche horizon pour debug
-          renderMarker(name, horiz, true);
+          if (selectedObject === name) {
+            lastTargetHoriz = { name, horiz, eq, type: "planet" };
+            // Distance affichée
+            const dKm = eq.dist * 149597870.7; // AU -> km
+            updateHUD(name, dKm, "km");
+          }
 
+          renderMarker(name, horiz, true);
         } catch (e) {
           console.log("Planet error", name, e);
         }
-      });
+      }
 
       // Étoiles
-      starData.forEach(star => {
+      for (const star of starData) {
         try {
           const horiz = Astronomy.Horizon(now, obs, star.ra, star.dec, "refray");
+
+          if (selectedObject === star.name) {
+            lastTargetHoriz = { name: star.name, horiz, star, type: "star" };
+            updateHUD(star.name, star.dist, "ly");
+          }
+
           renderMarker(star.name, horiz, false);
         } catch (e) {
           console.log("Star error", star.name, e);
         }
-      });
+      }
+
+      // Guidance en continu (30 fps environ)
+      if (tickGuidance) cancelAnimationFrame(tickGuidance);
+      tickGuidance = requestAnimationFrame(guidanceLoop);
     }
 
+    // ----------------------------
+    // Marker visible + surbrillance cible
+    // ----------------------------
     function renderMarker(name, horiz, isPlanet) {
-      // NE PAS filtrer trop fort tant que tu testes
+      // Pour l’UX : on ne filtre pas trop fort.
+      // Si tu veux “réaliste”, remets un filtre altitude plus tard.
       // if (horiz.altitude < -20) return;
 
-      // Plus proche + plus gros = visible
-      const pos = azAltToCartesian(horiz.azimuth, Math.max(horiz.altitude, -5), 10);
+      const isSelected = (name === selectedObject);
+
+      // Plus proche => plus visible
+      const radiusSphere = 10; // sphère de repérage autour de toi
+      const altShown = Math.max(horiz.altitude, -5); // évite d’être sous le sol
+      const pos = azAltToCartesian(horiz.azimuth, altShown, radiusSphere);
 
       const el = document.createElement("a-entity");
       el.setAttribute("position", pos);
 
       const dot = document.createElement("a-sphere");
-      dot.setAttribute("radius", isPlanet ? "0.9" : "0.6");
+      dot.setAttribute("radius", isSelected ? "1.25" : (isPlanet ? "0.70" : "0.45"));
+
+      // Couleurs
+      let color = isPlanet ? "#00ffcc" : "#ffffff";
+      if (isSelected) {
+        // Cible en jaune-or (bien visible)
+        color = "#ffd24a";
+      }
+
       dot.setAttribute("material",
-        `color:${isPlanet ? "#00ffcc" : "#ffffff"};
-         emissive:${isPlanet ? "#00ffcc" : "#ffffff"};
-         emissiveIntensity:1.0;
+        `color:${color};
+         emissive:${color};
+         emissiveIntensity:${isSelected ? 1.6 : 0.9};
          opacity:1;
          transparent:true;`
       );
 
       el.appendChild(dot);
 
-      // Petit label visible
-      const label = document.createElement("a-text");
-      label.setAttribute("value", name);
-      label.setAttribute("color", "#ffffff");
-      label.setAttribute("width", "8");
-      label.setAttribute("position", "0 1.0 0");
-      el.appendChild(label);
+      // Label uniquement pour la cible (sinon trop chargé)
+      if (isSelected) {
+        const label = document.createElement("a-text");
+        label.setAttribute("value", name.toUpperCase());
+        label.setAttribute("color", "#ffffff");
+        label.setAttribute("width", "10");
+        label.setAttribute("align", "center");
+        label.setAttribute("position", "0 1.4 0");
+        el.appendChild(label);
+      }
 
       document.getElementById("celestial-layer").appendChild(el);
     }
 
     function azAltToCartesian(az, alt, radius) {
+      // Conversion “sphère” (comme dans tes versions)
       const phi = (90 - alt) * (Math.PI / 180);
       const theta = (az + 180) * (Math.PI / 180);
       return `${radius * Math.sin(phi) * Math.cos(theta)} ${radius * Math.cos(phi)} ${radius * Math.sin(phi) * Math.sin(theta)}`;
+    }
+
+    // ----------------------------
+    // HUD distance
+    // ----------------------------
+    function updateHUD(name, val, unit) {
+      const hud = document.getElementById("distance-hud");
+      hud.style.display = "block";
+      document.getElementById("hud-name").innerText = name;
+
+      if (unit === "km") {
+        document.getElementById("hud-dist").innerText = Math.round(val).toLocaleString("fr-FR");
+        document.getElementById("hud-unit").innerText = "Kilomètres de la Terre";
+      } else {
+        document.getElementById("hud-dist").innerText = Number(val).toFixed(1).toLocaleString("fr-FR");
+        document.getElementById("hud-unit").innerText = "Années-lumière de la Terre";
+      }
+    }
+
+    // ----------------------------
+    // Guidance : indique où tourner
+    // ----------------------------
+    function normalizeAngleDeg(a) {
+      // ramène dans [-180; +180]
+      a = (a + 180) % 360;
+      if (a < 0) a += 360;
+      return a - 180;
+    }
+
+    function recenterView() {
+      const btn = document.getElementById("btn-recenter");
+      const cam = document.getElementById("camera");
+
+      // Reset rotation (visuel)
+      cam.setAttribute("rotation", "0 0 0");
+
+      // Reset interne look-controls (si disponible)
+      const lc = cam.components && cam.components["look-controls"];
+      if (lc) {
+        try {
+          if (lc.yawObject) lc.yawObject.rotation.y = 0;
+          if (lc.pitchObject) lc.pitchObject.rotation.x = 0;
+          if (typeof lc.pause === "function") lc.pause();
+          if (typeof lc.play === "function") lc.play();
+        } catch (e) {}
+      }
+
+      btn.classList.add("success");
+      btn.textContent = "RECENTRÉ";
+      setTimeout(() => {
+        btn.classList.remove("success");
+        btn.textContent = "Recentrer";
+      }, 900);
+
+      guideEl.textContent = selectedObject
+        ? "Recentré. Bouge le téléphone et suis le guidage."
+        : "Recentré. Sélectionne un objet.";
+    }
+
+    function guidanceLoop() {
+      if (!selectedObject || !lastTargetHoriz) {
+        tickGuidance = requestAnimationFrame(guidanceLoop);
+        return;
+      }
+
+      const cam = document.getElementById("camera");
+      const rot = cam.getAttribute("rotation"); // degrés A-Frame
+      const camYaw = normalizeAngleDeg(rot.y);
+      const camPitch = normalizeAngleDeg(rot.x);
+
+      const targetAz = lastTargetHoriz.horiz.azimuth;
+      const targetAlt = lastTargetHoriz.horiz.altitude;
+
+      // Approximation cohérente avec ta conversion (theta = az+180)
+      // On cherche quel yaw/pitch “théorique” correspond à cet az/alt.
+      const desiredYaw = normalizeAngleDeg(targetAz - 180);
+      const desiredPitch = normalizeAngleDeg(-targetAlt);
+
+      const dYaw = normalizeAngleDeg(desiredYaw - camYaw);
+      const dPitch = normalizeAngleDeg(desiredPitch - camPitch);
+
+      const absYaw = Math.abs(dYaw);
+      const absPitch = Math.abs(dPitch);
+
+      // Statut "au centre"
+      if (absYaw < 6 && absPitch < 6) {
+        const above = (targetAlt >= 0) ? "au-dessus de l’horizon" : "sous l’horizon";
+        guideEl.textContent = `✅ ${selectedObject} CENTRÉ (${above})`;
+      } else {
+        const lr = dYaw > 0 ? "➡️ droite" : "⬅️ gauche";
+        const ud = dPitch > 0 ? "⬇️ baisse" : "⬆️ monte";
+
+        const extra = (targetAlt < 0)
+          ? " (⚠️ objet sous l’horizon)"
+          : "";
+
+        guideEl.textContent =
+          `Tourne ${lr} ~${Math.round(absYaw)}° | ${ud} ~${Math.round(absPitch)}°${extra}`;
+      }
+
+      tickGuidance = requestAnimationFrame(guidanceLoop);
     }
   </script>
 </body>
